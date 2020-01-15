@@ -16,6 +16,7 @@
 package io.netty.buffer;
 
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.PlatformDependent;
 import org.junit.Assume;
 import org.junit.Test;
@@ -57,10 +58,7 @@ public abstract class AbstractCompositeByteBufTest extends AbstractByteBufTest {
     private final ByteOrder order;
 
     protected AbstractCompositeByteBufTest(ByteOrder order) {
-        if (order == null) {
-            throw new NullPointerException("order");
-        }
-        this.order = order;
+        this.order = ObjectUtil.checkNotNull(order, "order");
     }
 
     @Override
@@ -107,6 +105,13 @@ public abstract class AbstractCompositeByteBufTest extends AbstractByteBufTest {
     @Override
     protected boolean discardReadBytesDoesNotMoveWritableBytes() {
         return false;
+    }
+
+    @Test
+    public void testIsContiguous() {
+        ByteBuf buf = newBuffer(4);
+        assertFalse(buf.isContiguous());
+        buf.release();
     }
 
     /**
@@ -977,7 +982,27 @@ public abstract class AbstractCompositeByteBufTest extends AbstractByteBufTest {
     @Override
     @Test
     public void testInternalNioBuffer() {
-        // ignore
+        CompositeByteBuf buf = compositeBuffer();
+        assertEquals(0, buf.internalNioBuffer(0, 0).remaining());
+
+        // If non-derived buffer is added, its internal buffer should be returned
+        ByteBuf concreteBuffer = directBuffer().writeByte(1);
+        buf.addComponent(concreteBuffer);
+        assertSame(concreteBuffer.internalNioBuffer(0, 1), buf.internalNioBuffer(0, 1));
+        buf.release();
+
+        // In derived cases, the original internal buffer must not be used
+        buf = compositeBuffer();
+        concreteBuffer = directBuffer().writeByte(1);
+        buf.addComponent(concreteBuffer.slice());
+        assertNotSame(concreteBuffer.internalNioBuffer(0, 1), buf.internalNioBuffer(0, 1));
+        buf.release();
+
+        buf = compositeBuffer();
+        concreteBuffer = directBuffer().writeByte(1);
+        buf.addComponent(concreteBuffer.duplicate());
+        assertNotSame(concreteBuffer.internalNioBuffer(0, 1), buf.internalNioBuffer(0, 1));
+        buf.release();
     }
 
     @Test
